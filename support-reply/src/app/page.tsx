@@ -466,12 +466,12 @@ export default function Home() {
       )}
 
       <div className="container mx-auto px-4 py-12 max-w-4xl">
-        {/* Hero Section */}
+        {/* Hero Section - Title and Main Form */}
         <div className="text-center mb-12">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
             Generate Perfect Support Replies
           </h2>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
             Transform customer messages into professional, tone-perfect responses in seconds. 
             Save time and maintain consistency across your support team.
           </p>
@@ -706,6 +706,73 @@ export default function Home() {
                   <span>Under 150 words each</span>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Marketing blocks - Only for signed-out users */}
+        {!user && (
+          <>
+            {/* Benefits Section */}
+            <div className="mt-20 mb-16">
+              <h3 className="text-2xl font-semibold text-gray-900 text-center mb-12">Benefits</h3>
+              <div className="grid md:grid-cols-3 gap-8">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center hover:shadow-md transition-shadow">
+                  <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">🎯</span>
+                  </div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Consistent tone</h4>
+                  <p className="text-gray-600">Maintain your brand voice across every customer interaction.</p>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center hover:shadow-md transition-shadow">
+                  <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">⚡</span>
+                  </div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Faster replies</h4>
+                  <p className="text-gray-600">Generate professional responses in seconds, not minutes.</p>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center hover:shadow-md transition-shadow">
+                  <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">🔒</span>
+                  </div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">No data stored</h4>
+                  <p className="text-gray-600">Your messages are processed and discarded immediately.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* How it works */}
+            <div className="mb-16">
+              <h3 className="text-2xl font-semibold text-gray-900 text-center mb-12">How it works</h3>
+              <div className="grid md:grid-cols-3 gap-8">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center hover:shadow-md transition-shadow">
+                  <div className="w-10 h-10 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold mb-4 mx-auto">1</div>
+                  <h4 className="font-semibold text-gray-900 mb-3">Paste customer message</h4>
+                  <p className="text-gray-600 text-sm">Copy and paste any customer inquiry or complaint.</p>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center hover:shadow-md transition-shadow">
+                  <div className="w-10 h-10 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold mb-4 mx-auto">2</div>
+                  <h4 className="font-semibold text-gray-900 mb-3">Choose your tone</h4>
+                  <p className="text-gray-600 text-sm">Select friendly, professional, or concise response style.</p>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center hover:shadow-md transition-shadow">
+                  <div className="w-10 h-10 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold mb-4 mx-auto">3</div>
+                  <h4 className="font-semibold text-gray-900 mb-3">Get 3 drafts</h4>
+                  <p className="text-gray-600 text-sm">Receive three different response options to choose from.</p>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Pricing Footer - Only for signed-out users */}
+        {!user && (
+          <div className="mt-16 text-center">
+            <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Pricing</h3>
+              <p className="text-sm text-gray-600">
+                <span className="font-medium">Free:</span> 5/day · <span className="font-medium">Pro:</span> Unlimited
+              </p>
             </div>
           </div>
         )}
