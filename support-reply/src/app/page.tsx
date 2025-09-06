@@ -10,20 +10,60 @@ export default function Home() {
   const [tone, setTone] = useState<Tone>("friendly");
   const [isLoading, setIsLoading] = useState(false);
   const [drafts, setDrafts] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const handleGenerate = async () => {
     if (message.length < 10) return;
     
     setIsLoading(true);
-    // TODO: Implement API call to /api/generate
-    setTimeout(() => {
-      setDrafts([
-        "Thank you for reaching out! I understand your concern and I'm here to help resolve this issue for you.",
-        "I appreciate you taking the time to contact us. Let me look into this matter and get back to you with a solution.",
-        "Thanks for your message. I'll investigate this and provide you with an update shortly."
-      ]);
+    setError(null);
+    
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: message.trim(),
+          tone: tone.charAt(0).toUpperCase() + tone.slice(1), // Convert to proper case
+          language: 'Auto'
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        // Handle specific server configuration error
+        if (errorData.code === 'MISSING_API_KEY') {
+          throw new Error('MISSING_CONFIG');
+        }
+        throw new Error(errorData.error || `Request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.drafts || !Array.isArray(data.drafts)) {
+        throw new Error('Invalid response format');
+      }
+
+      setDrafts(data.drafts);
+      setError(null);
+    } catch (err: any) {
+      console.error('Generate error:', err);
+      // Handle specific error types
+      if (err.message === 'MISSING_CONFIG') {
+        setError('MISSING_CONFIG');
+      } else {
+        setError(err.message || 'Failed to generate replies. Please try again.');
+      }
+      setDrafts([]);
+    } finally {
       setIsLoading(false);
-    }, 2000);
+    }
+  };
+
+  const handleRetry = () => {
+    handleGenerate();
   };
 
 
@@ -147,7 +187,53 @@ export default function Home() {
               </div>
             )}
           </button>
+          
+          {/* Inline Configuration Error */}
+          {error === 'MISSING_CONFIG' && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center">
+                <span className="text-yellow-600 mr-2">⚠️</span>
+                <span className="text-sm text-yellow-800">
+                  Missing server configuration
+                </span>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Error State */}
+        {error && error !== 'MISSING_CONFIG' && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-8">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <span className="text-red-500 text-xl">⚠️</span>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-red-800 mb-2">
+                  Failed to Generate Replies
+                </h3>
+                <p className="text-sm text-red-700 mb-4">
+                  {error}
+                </p>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleRetry}
+                    disabled={isLoading}
+                    className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isLoading ? 'Retrying...' : 'Try Again'}
+                  </button>
+                  <button
+                    onClick={() => setError(null)}
+                    className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Results */}
         {drafts.length > 0 ? (
@@ -162,7 +248,7 @@ export default function Home() {
               ))}
             </div>
           </div>
-        ) : (
+        ) : !error && (
           <div className="text-center py-16">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12">
               <div className="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
