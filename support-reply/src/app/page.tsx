@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ReplyCard from "../components/ReplyCard";
+import AuthPanel from "../components/AuthPanel";
+import { createClientComponentClient } from "@/lib/supabase";
+import type { User } from "@supabase/supabase-js";
 
 type Tone = "friendly" | "professional" | "concise";
 
@@ -11,6 +14,18 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [drafts, setDrafts] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthPanelOpen, setIsAuthPanelOpen] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+  const [quota, setQuota] = useState<{
+    limit: number | null;
+    used: number;
+    remaining: number | null;
+    pro: boolean;
+  } | null>(null);
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const supabase = createClientComponentClient();
 
   const handleGenerate = async () => {
     if (message.length < 10) return;
@@ -18,12 +33,30 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
     
+    // Debug: Check auth state before making API call
+    console.log('Frontend auth state before API call:', {
+      user: user ? { id: user.id, email: user.email } : null,
+      isPro: isPro
+    });
+    
+    // Debug: Check what cookies are available
+    console.log('All cookies:', document.cookie);
+    
+    // Debug: Check Supabase session
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log('Supabase session:', session ? { 
+      user: session.user.email, 
+      access_token: session.access_token ? 'present' : 'missing',
+      refresh_token: session.refresh_token ? 'present' : 'missing'
+    } : 'no session');
+    
     try {
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // This is crucial for sending auth cookies
         body: JSON.stringify({
           message: message.trim(),
           tone: tone.charAt(0).toUpperCase() + tone.slice(1), // Convert to proper case
@@ -33,6 +66,15 @@ export default function Home() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Handle quota exceeded (429)
+        if (response.status === 429 && errorData.error === 'DAILY_LIMIT_REACHED') {
+          setIsQuotaExceeded(true);
+          setError('QUOTA_EXCEEDED');
+          setDrafts([]);
+          return;
+        }
+        
         // Handle specific server configuration error
         if (errorData.code === 'MISSING_API_KEY') {
           throw new Error('MISSING_CONFIG');
@@ -48,6 +90,12 @@ export default function Home() {
 
       setDrafts(data.drafts);
       setError(null);
+      setIsQuotaExceeded(false);
+      
+      // Update quota information from response
+      if (data.quota) {
+        setQuota(data.quota);
+      }
     } catch (err: any) {
       console.error('Generate error:', err);
       // Handle specific error types
@@ -66,6 +114,221 @@ export default function Home() {
     handleGenerate();
   };
 
+  // Auth functions
+  const handleSignOut = async () => {
+    if (isSigningOut) return; // Prevent multiple clicks
+    
+    setIsSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setIsPro(false);
+      setQuota(null);
+      setIsQuotaExceeded(false);
+    } catch (error) {
+      console.error('Error signing out:', error);
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
+  const handleAuthSuccess = () => {
+    setIsAuthPanelOpen(false);
+  };
+
+  const handleSignInClick = () => {
+    setIsAuthPanelOpen(true);
+  };
+
+  const handleUpgradeClick = () => {
+    // This would open the existing upgrade modal
+    // For now, we'll just log it since the modal isn't implemented yet
+    console.log('Upgrade clicked - would open upgrade modal');
+  };
+
+  const renderQuotaDisplay = () => {
+    if (!quota) return null;
+
+    const { limit, used, remaining, pro } = quota;
+
+    if (pro) {
+      return (
+        <div className="text-center text-sm text-gray-600 mt-2">
+          Pro: Unlimited today
+        </div>
+      );
+    }
+
+    if (user) {
+      // Signed-in Free user
+      return (
+        <div className="text-center text-sm text-gray-600 mt-2">
+          Free: {used}/{limit} today.{' '}
+          <button
+            onClick={handleUpgradeClick}
+            className="text-orange-600 hover:text-orange-700 underline"
+          >
+            Upgrade for unlimited
+          </button>
+        </div>
+      );
+    } else {
+      // Anonymous user
+      return (
+        <div className="text-center text-sm text-gray-600 mt-2">
+          Free anonymous: {used}/{limit} today.{' '}
+          <button
+            onClick={handleSignInClick}
+            className="text-orange-600 hover:text-orange-700 underline"
+          >
+            Sign in for 20/day
+          </button>
+        </div>
+      );
+    }
+  };
+
+  // Check auth state on mount
+  useEffect(() => {
+    // Get initial session
+    const getInitialSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          return;
+        }
+        
+        console.log('Initial session:', session ? { user: session.user.email } : 'No session');
+        setUser(session?.user || null);
+        
+        // Reset quota state on initial load
+        setQuota(null);
+        setIsQuotaExceeded(false);
+        
+        if (session?.user) {
+          await fetchUserProfile(session.user);
+        }
+      } catch (error) {
+        console.error('Error in getInitialSession:', error);
+      }
+    };
+
+    // Function to fetch user profile
+    const fetchUserProfile = async (user: any) => {
+      try {
+        console.log('Fetching profile for user:', user.id);
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('pro')
+          .eq('user_id', user.id)
+          .single();
+      
+        if (error) {
+          // Handle specific error cases
+          if (error.code === 'PGRST116') {
+            // Profile doesn't exist - this is normal for new users
+            console.log('Profile not found for user, will be created on first generation');
+            setIsPro(false);
+          } else {
+            // Log more detailed error information
+            console.error('Error fetching profile:', {
+              code: error.code,
+              message: error.message,
+              details: error.details,
+              hint: error.hint
+            });
+            setIsPro(false);
+          }
+        } else {
+          setIsPro((profile as any)?.pro || false);
+        }
+      } catch (error) {
+        console.error('Error in fetchUserProfile:', error);
+        setIsPro(false);
+      }
+    };
+
+    getInitialSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event: any, session: any) => {
+        console.log('Auth state changed:', event, session?.user?.email);
+        setUser(session?.user || null);
+        
+        // Reset quota state on auth changes
+        setQuota(null);
+        setIsQuotaExceeded(false);
+        
+        if (session?.user) {
+          // Create or get profile when user signs in
+          try {
+            console.log('Auth change: Fetching profile for user:', session.user.id);
+            const { data: profile, error: profileError } = await supabase
+              .from('profiles')
+              .select('pro')
+              .eq('user_id', session.user.id)
+              .single();
+            
+            console.log('Auth change: Profile fetch result:', { profile, profileError });
+            
+            if (profileError && profileError.code === 'PGRST116') {
+              // Profile doesn't exist, create it
+              const { error: insertError } = await (supabase as any)
+                .from('profiles')
+                .insert({
+                  user_id: session.user.id,
+                  email: session.user.email,
+                  pro: false,
+                  created_at: new Date().toISOString()
+                });
+              
+              if (insertError) {
+                console.log('Raw insertError:', insertError);
+                console.log('insertError type:', typeof insertError);
+                console.log('insertError keys:', Object.keys(insertError));
+                
+                console.error('Error creating profile:', {
+                  code: insertError.code || 'unknown',
+                  message: insertError.message || 'No message',
+                  details: insertError.details || 'No details',
+                  hint: insertError.hint || 'No hint'
+                });
+              }
+              setIsPro(false);
+            } else if (profileError) {
+              // Other profile errors - log raw error first for debugging
+              console.log('Raw profileError in auth change:', profileError);
+              console.log('profileError type:', typeof profileError);
+              console.log('profileError keys:', Object.keys(profileError));
+              
+              console.error('Error fetching profile in auth change:', {
+                code: profileError.code || 'unknown',
+                message: profileError.message || 'No message',
+                details: profileError.details || 'No details',
+                hint: profileError.hint || 'No hint'
+              });
+              setIsPro(false);
+            } else if (profile) {
+              setIsPro((profile as any).pro || false);
+            } else {
+              setIsPro(false);
+            }
+          } catch (error) {
+            console.error('Error handling profile:', error);
+            setIsPro(false);
+          }
+        } else {
+          setIsPro(false);
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
@@ -78,11 +341,44 @@ export default function Home() {
                 <span className="text-white font-bold text-sm">AI</span>
               </div>
               <h1 className="text-xl font-semibold text-gray-900">Support Reply Suggestor</h1>
+              {isPro && (
+                <span className="bg-gradient-to-r from-orange-500 to-orange-600 text-white text-xs font-semibold px-2 py-1 rounded-full">
+                  Pro
+                </span>
+              )}
             </div>
-            <div className="hidden md:flex items-center space-x-4 text-sm text-gray-600">
-              <span>✨ AI-Powered</span>
-              <span>⚡ Fast</span>
-              <span>🔒 Private</span>
+            <div className="flex items-center space-x-4">
+              <div className="hidden md:flex items-center space-x-4 text-sm text-gray-600">
+                <span>✨ AI-Powered</span>
+                <span>⚡ Fast</span>
+                <span>🔒 Private</span>
+              </div>
+              {user ? (
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm text-gray-700">Signed in as {user.email}</span>
+                  <button
+                    onClick={handleSignOut}
+                    disabled={isSigningOut}
+                    className="px-3 py-1 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isSigningOut ? (
+                      <div className="flex items-center">
+                        <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent mr-1"></div>
+                        Signing out...
+                      </div>
+                    ) : (
+                      'Sign out'
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsAuthPanelOpen(true)}
+                  className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors"
+                >
+                  Sign in
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -172,13 +468,18 @@ export default function Home() {
           {/* Generate Button */}
           <button
             onClick={handleGenerate}
-            disabled={message.length < 10 || isLoading}
+            disabled={message.length < 10 || isLoading || isQuotaExceeded}
             className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:transform-none"
           >
             {isLoading ? (
               <div className="flex items-center justify-center">
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-3"></div>
                 Generating your replies...
+              </div>
+            ) : isQuotaExceeded ? (
+              <div className="flex items-center justify-center">
+                <span>⏰</span>
+                <span className="ml-2">Daily Limit Reached</span>
               </div>
             ) : (
               <div className="flex items-center justify-center">
@@ -187,6 +488,9 @@ export default function Home() {
               </div>
             )}
           </button>
+          
+          {/* Quota Display */}
+          {renderQuotaDisplay()}
           
           {/* Inline Configuration Error */}
           {error === 'MISSING_CONFIG' && (
@@ -199,10 +503,55 @@ export default function Home() {
               </div>
             </div>
           )}
+
+          {/* Quota Exceeded Error */}
+          {error === 'QUOTA_EXCEEDED' && (
+            <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="text-center">
+                <div className="flex items-center justify-center mb-2">
+                  <span className="text-orange-600 mr-2">⏰</span>
+                  <span className="text-sm font-medium text-orange-800">
+                    Daily limit reached
+                  </span>
+                </div>
+                <p className="text-sm text-orange-700 mb-3">
+                  {user 
+                    ? "You've used all your free generations today. Upgrade for unlimited access."
+                    : "You've used all your anonymous generations today. Sign in for 20/day or upgrade for unlimited."
+                  }
+                </p>
+                <div className="flex justify-center space-x-3">
+                  {user ? (
+                    <button
+                      onClick={handleUpgradeClick}
+                      className="px-4 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 transition-colors"
+                    >
+                      Upgrade Now
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleSignInClick}
+                        className="px-4 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 transition-colors"
+                      >
+                        Sign In
+                      </button>
+                      <button
+                        onClick={handleUpgradeClick}
+                        className="px-4 py-2 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 transition-colors"
+                      >
+                        Upgrade
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Error State */}
-        {error && error !== 'MISSING_CONFIG' && (
+        {error && error !== 'MISSING_CONFIG' && error !== 'QUOTA_EXCEEDED' && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-8">
             <div className="flex items-start">
               <div className="flex-shrink-0">
@@ -294,6 +643,13 @@ export default function Home() {
           </div>
         </footer>
       </div>
+
+      {/* Auth Panel */}
+      <AuthPanel
+        isOpen={isAuthPanelOpen}
+        onClose={() => setIsAuthPanelOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
+      />
     </div>
   );
 }

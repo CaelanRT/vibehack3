@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createApiRouteClient } from '@/lib/supabase-server';
+import { cookies } from 'next/headers';
+import { SignJWT, jwtVerify } from 'jose';
 
 type Tone = 'Friendly' | 'Professional' | 'Concise';
 type Language = 'Auto' | 'English' | 'French' | string;
@@ -11,6 +14,149 @@ interface GenerateRequest {
 
 interface GenerateResponse {
   drafts: string[];
+  quota: {
+    limit: number | null;
+    used: number;
+    remaining: number | null;
+    pro: boolean;
+  };
+}
+
+interface QuotaErrorResponse {
+  error: 'DAILY_LIMIT_REACHED';
+  limit: number;
+  remaining: number;
+  pro: boolean;
+  message: string;
+}
+
+// Anonymous quota tracking with signed cookies
+const ANON_QUOTA_LIMIT = 5;
+const FREE_QUOTA_LIMIT = 20;
+const PRO_SAFETY_CAP = 1000;
+
+// Get JWT secret for signing cookies
+function getJWTSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET || 'fallback-secret-key-for-development';
+  return new TextEncoder().encode(secret);
+}
+
+// Create or get anonymous session cookie
+async function getOrCreateAnonSession(): Promise<string> {
+  const cookieStore = await cookies();
+  const anonCookie = cookieStore.get('anon_session');
+  
+  if (anonCookie?.value) {
+    try {
+      const { payload } = await jwtVerify(anonCookie.value, getJWTSecret());
+      return payload.sessionId as string;
+    } catch (e) {
+      // Invalid cookie, create new session
+    }
+  }
+  
+  // Create new anonymous session
+  const sessionId = crypto.randomUUID();
+  const token = await new SignJWT({ sessionId })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('30d')
+    .sign(getJWTSecret());
+  
+  cookieStore.set('anon_session', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+    path: '/'
+  });
+  
+  return sessionId;
+}
+
+// Check anonymous quota using in-memory tracking
+const anonQuotaMap = new Map<string, { day: string; count: number }>();
+
+async function checkAnonQuota(sessionId: string): Promise<{ allowed: boolean; used: number }> {
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const key = `${sessionId}:${today}`;
+  
+  const current = anonQuotaMap.get(key) || { day: today, count: 0 };
+  
+  if (current.count >= ANON_QUOTA_LIMIT) {
+    return { allowed: false, used: current.count };
+  }
+  
+  // Increment count
+  current.count++;
+  anonQuotaMap.set(key, current);
+  
+  return { allowed: true, used: current.count };
+}
+
+// Check signed-in user quota
+async function checkUserQuota(supabase: any, userId: string, isPro: boolean): Promise<{ allowed: boolean; used: number }> {
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  
+  if (isPro) {
+    // Pro users have unlimited access (with safety cap)
+    const { data: quotaData } = await supabase
+      .from('daily_quota')
+      .select('count')
+      .eq('user_id', userId)
+      .eq('day', today)
+      .single();
+    
+    const currentCount = quotaData?.count || 0;
+    
+    if (currentCount >= PRO_SAFETY_CAP) {
+      return { allowed: false, used: currentCount };
+    }
+    
+    // Increment count for Pro users (for tracking)
+    await supabase
+      .from('daily_quota')
+      .upsert({
+        user_id: userId,
+        day: today,
+        count: currentCount + 1
+      });
+    
+    return { allowed: true, used: currentCount + 1 };
+  } else {
+    // Free users: enforce 20/day limit
+    const { data: quotaData } = await supabase
+      .from('daily_quota')
+      .select('count')
+      .eq('user_id', userId)
+      .eq('day', today)
+      .single();
+    
+    const currentCount = quotaData?.count || 0;
+    
+    if (currentCount >= FREE_QUOTA_LIMIT) {
+      return { allowed: false, used: currentCount };
+    }
+    
+    // Atomic upsert + increment
+    const { data: updatedData, error } = await supabase
+      .from('daily_quota')
+      .upsert({
+        user_id: userId,
+        day: today,
+        count: currentCount + 1
+      }, {
+        onConflict: 'user_id,day'
+      })
+      .select('count')
+      .single();
+    
+    if (error) {
+      console.error('Error updating daily quota:', error);
+      return { allowed: false, used: currentCount };
+    }
+    
+    return { allowed: true, used: updatedData.count };
+  }
 }
 
 // Input validation and sanitization
@@ -111,6 +257,78 @@ export async function POST(request: NextRequest) {
 
     console.log(`[${requestId}] Processing request - tone: ${tone}, language: ${language}, message length: ${message.length}`);
 
+    // Debug: Check what cookies are being sent
+    const cookieHeader = request.headers.get('cookie');
+    console.log(`[${requestId}] Cookie header: ${cookieHeader ? cookieHeader.substring(0, 100) + '...' : 'none'}`);
+
+    // Initialize Supabase client
+    const supabase = createApiRouteClient(request);
+    
+    // Check authentication and quota
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    console.log(`[${requestId}] Auth check - user: ${user ? user.id : 'null'}, email: ${user?.email || 'null'}, error: ${userError?.message || 'none'}`);
+    
+    let quotaResult: { allowed: boolean; used: number };
+    let isPro = false;
+    let limit: number | null = null;
+    
+    if (user) {
+      // Signed-in user: check profile and quota
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('pro')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (profileError && profileError.code === 'PGRST116') {
+        // Profile doesn't exist, create it
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            user_id: user.id,
+            email: user.email,
+            pro: false,
+            created_at: new Date().toISOString()
+          });
+        
+        if (insertError) {
+          console.error(`[${requestId}] Error creating profile:`, insertError);
+        }
+        isPro = false;
+        limit = FREE_QUOTA_LIMIT;
+      } else if (profile) {
+        isPro = profile.pro || false;
+        limit = isPro ? null : FREE_QUOTA_LIMIT;
+      } else {
+        isPro = false;
+        limit = FREE_QUOTA_LIMIT;
+      }
+      
+      quotaResult = await checkUserQuota(supabase, user.id, isPro);
+      console.log(`[${requestId}] User quota check - user: ${user.id}, pro: ${isPro}, used: ${quotaResult.used}, allowed: ${quotaResult.allowed}`);
+    } else {
+      // Anonymous user: check anonymous quota
+      const sessionId = await getOrCreateAnonSession();
+      quotaResult = await checkAnonQuota(sessionId);
+      limit = ANON_QUOTA_LIMIT;
+      console.log(`[${requestId}] Anonymous quota check - session: ${sessionId}, used: ${quotaResult.used}, allowed: ${quotaResult.allowed}`);
+    }
+    
+    // Check if quota exceeded
+    if (!quotaResult.allowed) {
+      const errorResponse: QuotaErrorResponse = {
+        error: 'DAILY_LIMIT_REACHED',
+        limit: limit!,
+        remaining: 0,
+        pro: isPro,
+        message: 'Daily limit reached. Sign in or upgrade for higher limits.'
+      };
+      
+      console.log(`[${requestId}] Quota exceeded - limit: ${limit}, used: ${quotaResult.used}`);
+      return NextResponse.json(errorResponse, { status: 429 });
+    }
+
     // Create OpenAI request
     const systemPrompt = createSystemPrompt(tone, language);
     
@@ -174,7 +392,18 @@ export async function POST(request: NextRequest) {
     const duration = Date.now() - startTime;
     console.log(`[${requestId}] Success - generated ${drafts.length} drafts in ${duration}ms`);
 
-    const response: GenerateResponse = { drafts: drafts.slice(0, 3) };
+    // Calculate remaining quota
+    const remaining = limit ? Math.max(0, limit - quotaResult.used) : null;
+
+    const response: GenerateResponse = { 
+      drafts: drafts.slice(0, 3),
+      quota: {
+        limit,
+        used: quotaResult.used,
+        remaining,
+        pro: isPro
+      }
+    };
     return NextResponse.json(response);
 
   } catch (error: any) {

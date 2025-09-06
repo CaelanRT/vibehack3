@@ -41,3 +41,6 @@ Paste a customer message → choose tone → click **Generate** → get 3 reply 
 - lib/
 - openai.ts
 
+## Authentication
+Auth = Email Magic Link only. Uses Supabase Auth with magic link authentication.
+
