@@ -15,6 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "SupportGen",
   description: "Generate AI-powered customer support replies in seconds",
+  icons: {
+    icon: "/supportgein-logo.png",
+    shortcut: "/supportgein-logo.png",
+    apple: "/supportgein-logo.png",
+  },
 };
 
 export default function RootLayout({

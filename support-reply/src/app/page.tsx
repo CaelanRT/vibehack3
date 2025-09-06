@@ -5,6 +5,8 @@ import ReplyCard from "../components/ReplyCard";
 import AuthPanel from "../components/AuthPanel";
 import { createClientComponentClient } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
+import Image from "next/image";
+import Link from "next/link";
 
 type Tone = "friendly" | "professional" | "concise";
 
@@ -378,12 +380,16 @@ export default function Home() {
         <div className="container mx-auto px-4 py-4 max-w-6xl">
           <div className="flex items-center justify-between">
             {/* Left: SupportGen logo + wordmark */}
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">SG</span>
-              </div>
-              <h1 className="text-xl font-semibold text-gray-900">SupportGen</h1>
-            </div>
+            <Link href="/" className="flex items-center gap-2">
+              <Image
+                src="/supportgein-logo.png"
+                alt="SupportGen"
+                width={32}
+                height={32}
+                className="h-8 w-auto"
+              />
+              <h1 className="text-xl font-bold text-gray-900">SupportGen</h1>
+            </Link>
             
             {/* Right: Auth state + Pro badge + Upgrade + Sign out */}
             <div className="flex items-center space-x-3">
