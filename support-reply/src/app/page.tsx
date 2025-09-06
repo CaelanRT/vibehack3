@@ -25,6 +25,8 @@ export default function Home() {
   } | null>(null);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const supabase = createClientComponentClient();
 
   const handleGenerate = async () => {
@@ -106,13 +108,21 @@ export default function Home() {
     
     setIsSigningOut(true);
     try {
-      await supabase.auth.signOut();
+      // Add timeout to prevent hanging
+      const signOutPromise = supabase.auth.signOut();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Sign out timeout')), 5000)
+      );
+      
+      await Promise.race([signOutPromise, timeoutPromise]);
+      // Let the auth state change listener handle state updates
+    } catch (error) {
+      console.error('Error signing out:', error);
+      // Force state reset if sign out fails
       setUser(null);
       setIsPro(false);
       setQuota(null);
       setIsQuotaExceeded(false);
-    } catch (error) {
-      console.error('Error signing out:', error);
     } finally {
       setIsSigningOut(false);
     }
@@ -126,10 +136,45 @@ export default function Home() {
     setIsAuthPanelOpen(true);
   };
 
-  const handleUpgradeClick = () => {
-    // This would open the existing upgrade modal
-    // For now, we'll just log it since the modal isn't implemented yet
-    console.log('Upgrade clicked - would open upgrade modal');
+  const handleUpgradeClick = async () => {
+    if (isUpgrading) return;
+    
+    setIsUpgrading(true);
+    setUpgradeError(null);
+    
+    try {
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      
+      if (response.status === 401) {
+        setUpgradeError('Sign in to upgrade');
+        setIsAuthPanelOpen(true);
+        return;
+      }
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        
+        // Handle specific error types
+        if (errorData.error === 'CONFIG_ERROR') {
+          setUpgradeError('Upgrade temporarily unavailable. Please try again later.');
+          return;
+        }
+        
+        throw new Error(errorData.message || 'Failed to create checkout session');
+      }
+      
+      const { url } = await response.json();
+      window.location.href = url;
+      
+    } catch (error: any) {
+      console.error('Upgrade error:', error);
+      setUpgradeError(error.message || 'Failed to start upgrade process');
+    } finally {
+      setIsUpgrading(false);
+    }
   };
 
   const renderQuotaDisplay = () => {
@@ -228,7 +273,9 @@ export default function Home() {
             setIsPro(false);
           }
         } else {
-          setIsPro((profile as any)?.pro || false);
+          const proStatus = (profile as any)?.pro || false;
+          console.log('Profile fetched - Pro status:', proStatus);
+          setIsPro(proStatus);
         }
       } catch (error) {
         console.error('Error in fetchUserProfile:', error);
@@ -290,7 +337,9 @@ export default function Home() {
               });
               setIsPro(false);
             } else if (profile) {
-              setIsPro((profile as any).pro || false);
+              const proStatus = (profile as any).pro || false;
+              console.log('Auth change - Profile fetched - Pro status:', proStatus);
+              setIsPro(proStatus);
             } else {
               setIsPro(false);
             }
@@ -331,36 +380,74 @@ export default function Home() {
                 <span>⚡ Fast</span>
                 <span>🔒 Private</span>
               </div>
-              {user ? (
-                <div className="flex items-center space-x-3">
-                  <span className="text-sm text-gray-700">Signed in as {user.email}</span>
+              <div className="flex items-center space-x-3">
+                {!isPro && (
                   <button
-                    onClick={handleSignOut}
-                    disabled={isSigningOut}
-                    className="px-3 py-1 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    onClick={handleUpgradeClick}
+                    disabled={isUpgrading}
+                    className="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white text-sm font-medium rounded-lg hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
                   >
-                    {isSigningOut ? (
+                    {isUpgrading ? (
                       <div className="flex items-center">
-                        <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent mr-1"></div>
-                        Signing out...
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                        Upgrading...
                       </div>
                     ) : (
-                      'Sign out'
+                      '✨ Upgrade to Pro'
                     )}
                   </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setIsAuthPanelOpen(true)}
-                  className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors"
-                >
-                  Sign in
-                </button>
-              )}
+                )}
+                {user ? (
+                  <div className="flex items-center space-x-3">
+                    <span className="text-sm text-gray-700">Signed in as {user.email}</span>
+                    <button
+                      onClick={handleSignOut}
+                      disabled={isSigningOut}
+                      className="px-3 py-1 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isSigningOut ? (
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent mr-1"></div>
+                          Signing out...
+                        </div>
+                      ) : (
+                        'Sign out'
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setIsAuthPanelOpen(true)}
+                    className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors"
+                  >
+                    Sign in
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Upgrade Error Display */}
+      {upgradeError && (
+        <div className="bg-red-50 border-b border-red-200">
+          <div className="container mx-auto px-4 py-3 max-w-6xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <span className="text-red-600 mr-2">⚠️</span>
+                <span className="text-sm text-red-800">{upgradeError}</span>
+              </div>
+              <button
+                onClick={() => setUpgradeError(null)}
+                className="text-red-600 hover:text-red-800 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="container mx-auto px-4 py-12 max-w-4xl">
         {/* Hero Section */}
