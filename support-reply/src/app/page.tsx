@@ -9,7 +9,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState<Tone>("friendly");
   const [isLoading, setIsLoading] = useState(false);
-  const [results, setResults] = useState<string[]>([]);
+  const [drafts, setDrafts] = useState<string[]>([]);
 
   const handleGenerate = async () => {
     if (message.length < 10) return;
@@ -17,7 +17,7 @@ export default function Home() {
     setIsLoading(true);
     // TODO: Implement API call to /api/generate
     setTimeout(() => {
-      setResults([
+      setDrafts([
         "Thank you for reaching out! I understand your concern and I'm here to help resolve this issue for you.",
         "I appreciate you taking the time to contact us. Let me look into this matter and get back to you with a solution.",
         "Thanks for your message. I'll investigate this and provide you with an update shortly."
@@ -150,16 +150,46 @@ export default function Home() {
         </div>
 
         {/* Results */}
-        {results.length > 0 && (
+        {drafts.length > 0 ? (
           <div className="space-y-6">
             <div className="text-center">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Generated Replies</h2>
               <p className="text-gray-600">Choose the best reply and copy it to your clipboard</p>
             </div>
             <div className="grid gap-6">
-              {results.map((reply, index) => (
-                <ReplyCard key={index} text={reply} index={index} />
+              {drafts.map((draft, index) => (
+                <ReplyCard key={index} text={draft} index={index} />
               ))}
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-16">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12">
+              <div className="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <span className="text-2xl">💬</span>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">
+                Ready to Generate Replies
+              </h3>
+              <p className="text-gray-600 max-w-md mx-auto leading-relaxed">
+                Paste a customer message above, select your preferred tone, and click 
+                <span className="font-medium text-orange-600"> Generate Replies</span> to get 
+                three AI-powered response options.
+              </p>
+              <div className="mt-6 flex items-center justify-center space-x-4 text-sm text-gray-500">
+                <div className="flex items-center">
+                  <span className="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
+                  <span>3 reply options</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
+                  <span>Copy with one click</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
+                  <span>Under 150 words each</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
