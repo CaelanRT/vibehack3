@@ -1,103 +1,183 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import ReplyCard from "../components/ReplyCard";
+
+type Tone = "friendly" | "professional" | "concise";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [message, setMessage] = useState("");
+  const [tone, setTone] = useState<Tone>("friendly");
+  const [isLoading, setIsLoading] = useState(false);
+  const [results, setResults] = useState<string[]>([]);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const handleGenerate = async () => {
+    if (message.length < 10) return;
+    
+    setIsLoading(true);
+    // TODO: Implement API call to /api/generate
+    setTimeout(() => {
+      setResults([
+        "Thank you for reaching out! I understand your concern and I'm here to help resolve this issue for you.",
+        "I appreciate you taking the time to contact us. Let me look into this matter and get back to you with a solution.",
+        "Thanks for your message. I'll investigate this and provide you with an update shortly."
+      ]);
+      setIsLoading(false);
+    }, 2000);
+  };
+
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
+      {/* Header with subtle background */}
+      <div className="bg-white/80 backdrop-blur-sm border-b border-gray-100 sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-4 max-w-6xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">AI</span>
+              </div>
+              <h1 className="text-xl font-semibold text-gray-900">Support Reply Suggestor</h1>
+            </div>
+            <div className="hidden md:flex items-center space-x-4 text-sm text-gray-600">
+              <span>✨ AI-Powered</span>
+              <span>⚡ Fast</span>
+              <span>🔒 Private</span>
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
+
+      <div className="container mx-auto px-4 py-12 max-w-4xl">
+        {/* Hero Section */}
+        <div className="text-center mb-12">
+          <h2 className="text-4xl font-bold text-gray-900 mb-4">
+            Generate Perfect Support Replies
+          </h2>
+          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+            Transform customer messages into professional, tone-perfect responses in seconds. 
+            Save time and maintain consistency across your support team.
+          </p>
+        </div>
+
+        {/* Main Form Card */}
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 mb-8">
+          {/* Customer Message Input */}
+          <div className="mb-8">
+            <label htmlFor="message" className="block text-sm font-semibold text-gray-900 mb-3">
+              Customer Message
+            </label>
+            <div className="relative">
+              <textarea
+                id="message"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Paste the customer's message here... (e.g., 'I'm having trouble with my order and it's been 3 days since I placed it. Can you help?')"
+                className="w-full h-40 p-4 border-2 border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-500 transition-all duration-200 text-gray-900 placeholder-gray-400"
+                maxLength={2500}
+              />
+              <div className="absolute bottom-3 right-3 text-xs text-gray-400 bg-white px-2 py-1 rounded">
+                {message.length}/2500
+              </div>
+            </div>
+            <div className="flex justify-between items-center mt-2">
+              <span className={`text-sm ${message.length < 10 ? "text-red-500" : "text-green-600"}`}>
+                {message.length < 10 ? "⚠️ Minimum 10 characters required" : "✅ Ready to generate"}
+              </span>
+            </div>
+          </div>
+
+          {/* Tone Selection */}
+          <div className="mb-8">
+            <label className="block text-sm font-semibold text-gray-900 mb-4">Reply Tone</label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[
+                { value: "friendly", label: "Friendly", description: "Warm and approachable" },
+                { value: "professional", label: "Professional", description: "Formal and polished" },
+                { value: "concise", label: "Concise", description: "Brief and direct" }
+              ].map((option) => (
+                <label key={option.value} className="relative cursor-pointer">
+                  <input
+                    type="radio"
+                    name="tone"
+                    value={option.value}
+                    checked={tone === option.value}
+                    onChange={(e) => setTone(e.target.value as Tone)}
+                    className="sr-only"
+                  />
+                  <div className={`p-4 rounded-xl border-2 transition-all duration-200 ${
+                    tone === option.value 
+                      ? "border-orange-500 bg-orange-50 shadow-md" 
+                      : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                  }`}>
+                    <div className="flex items-center mb-2">
+                      <div className={`w-4 h-4 rounded-full border-2 mr-3 ${
+                        tone === option.value 
+                          ? "border-orange-500 bg-orange-500" 
+                          : "border-gray-300"
+                      }`}>
+                        {tone === option.value && (
+                          <div className="w-2 h-2 bg-white rounded-full mx-auto mt-0.5"></div>
+                        )}
+                      </div>
+                      <span className="font-medium text-gray-900">{option.label}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 ml-7">{option.description}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Generate Button */}
+          <button
+            onClick={handleGenerate}
+            disabled={message.length < 10 || isLoading}
+            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:transform-none"
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-3"></div>
+                Generating your replies...
+              </div>
+            ) : (
+              <div className="flex items-center justify-center">
+                <span>🚀</span>
+                <span className="ml-2">Generate Replies</span>
+              </div>
+            )}
+          </button>
+        </div>
+
+        {/* Results */}
+        {results.length > 0 && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Generated Replies</h2>
+              <p className="text-gray-600">Choose the best reply and copy it to your clipboard</p>
+            </div>
+            <div className="grid gap-6">
+              {results.map((reply, index) => (
+                <ReplyCard key={index} text={reply} index={index} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Privacy Footer */}
+        <footer className="mt-16 text-center">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-center mb-2">
+              <span className="text-green-500 mr-2">🔒</span>
+              <span className="font-medium text-gray-900">Your Privacy is Protected</span>
+            </div>
+            <p className="text-sm text-gray-600 max-w-2xl mx-auto">
+              We don't store your messages. They're sent to our AI provider to generate replies, then immediately discarded. 
+              Your data never leaves our secure processing pipeline.
+            </p>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }
