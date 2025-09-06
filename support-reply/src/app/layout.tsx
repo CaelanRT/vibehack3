@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Support Reply Suggestor",
+  title: "SupportGen",
   description: "Generate AI-powered customer support replies in seconds",
 };
 

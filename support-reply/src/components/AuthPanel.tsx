@@ -70,9 +70,8 @@ export default function AuthPanel({ isOpen, onClose, onAuthSuccess }: AuthPanelP
       
       if (data.user) {
         setMessage("Account created successfully! You are now signed in.");
-        setTimeout(() => {
-          onAuthSuccess();
-        }, 1000);
+        // Don't close immediately - let the auth state change listener handle the UI update
+        // The modal will close when the parent component detects the auth state change
       } else {
         setMessage("Account created! Please check your email to confirm your account.");
       }
@@ -107,9 +106,8 @@ export default function AuthPanel({ isOpen, onClose, onAuthSuccess }: AuthPanelP
       
       if (data.user) {
         setMessage("Signed in successfully!");
-        setTimeout(() => {
-          onAuthSuccess();
-        }, 1000);
+        // Don't close immediately - let the auth state change listener handle the UI update
+        // The modal will close when the parent component detects the auth state change
       }
     } catch (error: any) {
       console.error('Sign in error:', error);

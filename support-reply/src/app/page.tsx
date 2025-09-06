@@ -110,12 +110,21 @@ export default function Home() {
     try {
       // Add timeout to prevent hanging
       const signOutPromise = supabase.auth.signOut();
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Sign out timeout')), 5000)
+      const timeoutPromise = new Promise((resolve) => 
+        setTimeout(() => resolve('timeout'), 5000)
       );
       
-      await Promise.race([signOutPromise, timeoutPromise]);
-      // Let the auth state change listener handle state updates
+      const result = await Promise.race([signOutPromise, timeoutPromise]);
+      
+      if (result === 'timeout') {
+        console.log('Sign out timed out, forcing state reset');
+        // Force state reset if sign out times out
+        setUser(null);
+        setIsPro(false);
+        setQuota(null);
+        setIsQuotaExceeded(false);
+      }
+      // If sign out succeeded, let the auth state change listener handle state updates
     } catch (error) {
       console.error('Error signing out:', error);
       // Force state reset if sign out fails
@@ -291,6 +300,11 @@ export default function Home() {
         console.log('Auth state changed:', event, session?.user?.email || 'signed out');
         setUser(session?.user || null);
         
+        // Close auth panel if user successfully signed in
+        if (event === 'SIGNED_IN' && session?.user) {
+          setIsAuthPanelOpen(false);
+        }
+        
         // Reset quota state on auth changes
         setQuota(null);
         setIsQuotaExceeded(false);
@@ -363,67 +377,63 @@ export default function Home() {
       <div className="bg-white/80 backdrop-blur-sm border-b border-gray-100 sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 max-w-6xl">
           <div className="flex items-center justify-between">
+            {/* Left: SupportGen logo + wordmark */}
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">AI</span>
+                <span className="text-white font-bold text-sm">SG</span>
               </div>
-              <h1 className="text-xl font-semibold text-gray-900">Support Reply Suggestor</h1>
+              <h1 className="text-xl font-semibold text-gray-900">SupportGen</h1>
+            </div>
+            
+            {/* Right: Auth state + Pro badge + Upgrade + Sign out */}
+            <div className="flex items-center space-x-3">
               {isPro && (
                 <span className="bg-gradient-to-r from-orange-500 to-orange-600 text-white text-xs font-semibold px-2 py-1 rounded-full">
                   Pro
                 </span>
               )}
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="hidden md:flex items-center space-x-4 text-sm text-gray-600">
-                <span>✨ AI-Powered</span>
-                <span>⚡ Fast</span>
-                <span>🔒 Private</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                {!isPro && (
+              {!isPro && (
+                <button
+                  onClick={handleUpgradeClick}
+                  disabled={isUpgrading}
+                  className="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white text-sm font-medium rounded-lg hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
+                >
+                  {isUpgrading ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                      Upgrading...
+                    </div>
+                  ) : (
+                    '✨ Upgrade to Pro'
+                  )}
+                </button>
+              )}
+              {user ? (
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm text-gray-700">Signed in as {user.email}</span>
                   <button
-                    onClick={handleUpgradeClick}
-                    disabled={isUpgrading}
-                    className="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white text-sm font-medium rounded-lg hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg"
+                    onClick={handleSignOut}
+                    disabled={isSigningOut}
+                    className="px-3 py-1 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    {isUpgrading ? (
+                    {isSigningOut ? (
                       <div className="flex items-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
-                        Upgrading...
+                        <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent mr-1"></div>
+                        Signing out...
                       </div>
                     ) : (
-                      '✨ Upgrade to Pro'
+                      'Sign out'
                     )}
                   </button>
-                )}
-                {user ? (
-                  <div className="flex items-center space-x-3">
-                    <span className="text-sm text-gray-700">Signed in as {user.email}</span>
-                    <button
-                      onClick={handleSignOut}
-                      disabled={isSigningOut}
-                      className="px-3 py-1 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {isSigningOut ? (
-                        <div className="flex items-center">
-                          <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent mr-1"></div>
-                          Signing out...
-                        </div>
-                      ) : (
-                        'Sign out'
-                      )}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setIsAuthPanelOpen(true)}
-                    className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors"
-                  >
-                    Sign in
-                  </button>
-                )}
-              </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsAuthPanelOpen(true)}
+                  className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors"
+                >
+                  Sign in
+                </button>
+              )}
             </div>
           </div>
         </div>
