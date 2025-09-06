@@ -257,17 +257,13 @@ export async function POST(request: NextRequest) {
 
     console.log(`[${requestId}] Processing request - tone: ${tone}, language: ${language}, message length: ${message.length}`);
 
-    // Debug: Check what cookies are being sent
-    const cookieHeader = request.headers.get('cookie');
-    console.log(`[${requestId}] Cookie header: ${cookieHeader ? cookieHeader.substring(0, 100) + '...' : 'none'}`);
-
     // Initialize Supabase client
     const supabase = createApiRouteClient(request);
     
     // Check authentication and quota
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
-    console.log(`[${requestId}] Auth check - user: ${user ? user.id : 'null'}, email: ${user?.email || 'null'}, error: ${userError?.message || 'none'}`);
+    console.log(`[${requestId}] Auth check - user: ${user ? user.email : 'anonymous'}`);
     
     let quotaResult: { allowed: boolean; used: number };
     let isPro = false;
@@ -306,13 +302,13 @@ export async function POST(request: NextRequest) {
       }
       
       quotaResult = await checkUserQuota(supabase, user.id, isPro);
-      console.log(`[${requestId}] User quota check - user: ${user.id}, pro: ${isPro}, used: ${quotaResult.used}, allowed: ${quotaResult.allowed}`);
+      console.log(`[${requestId}] User quota - used: ${quotaResult.used}/${limit}, allowed: ${quotaResult.allowed}`);
     } else {
       // Anonymous user: check anonymous quota
       const sessionId = await getOrCreateAnonSession();
       quotaResult = await checkAnonQuota(sessionId);
       limit = ANON_QUOTA_LIMIT;
-      console.log(`[${requestId}] Anonymous quota check - session: ${sessionId}, used: ${quotaResult.used}, allowed: ${quotaResult.allowed}`);
+      console.log(`[${requestId}] Anonymous quota - used: ${quotaResult.used}/${limit}, allowed: ${quotaResult.allowed}`);
     }
     
     // Check if quota exceeded
@@ -325,7 +321,7 @@ export async function POST(request: NextRequest) {
         message: 'Daily limit reached. Sign in or upgrade for higher limits.'
       };
       
-      console.log(`[${requestId}] Quota exceeded - limit: ${limit}, used: ${quotaResult.used}`);
+      console.log(`[${requestId}] Quota exceeded - ${quotaResult.used}/${limit}`);
       return NextResponse.json(errorResponse, { status: 429 });
     }
 

@@ -51,9 +51,7 @@ export const createApiRouteClient = (request: Request) => {
           return acc;
         }, {} as Record<string, string>);
         
-        // Debug: Log all cookies to see what we're getting
-        console.log(`Looking for cookie: ${name}`);
-        console.log(`Available cookies:`, Object.keys(cookies));
+        // Return cookie value
         
         return cookies[name];
       },

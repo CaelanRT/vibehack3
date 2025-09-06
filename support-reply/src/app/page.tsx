@@ -33,22 +33,8 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
     
-    // Debug: Check auth state before making API call
-    console.log('Frontend auth state before API call:', {
-      user: user ? { id: user.id, email: user.email } : null,
-      isPro: isPro
-    });
-    
-    // Debug: Check what cookies are available
-    console.log('All cookies:', document.cookie);
-    
-    // Debug: Check Supabase session
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log('Supabase session:', session ? { 
-      user: session.user.email, 
-      access_token: session.access_token ? 'present' : 'missing',
-      refresh_token: session.refresh_token ? 'present' : 'missing'
-    } : 'no session');
+    // Check auth state before making API call
+    console.log('Generating reply for user:', user ? user.email : 'anonymous');
     
     try {
       const response = await fetch('/api/generate', {
@@ -200,7 +186,7 @@ export default function Home() {
           return;
         }
         
-        console.log('Initial session:', session ? { user: session.user.email } : 'No session');
+        console.log('Session loaded:', session ? session.user.email : 'No session');
         setUser(session?.user || null);
         
         // Reset quota state on initial load
@@ -218,7 +204,7 @@ export default function Home() {
     // Function to fetch user profile
     const fetchUserProfile = async (user: any) => {
       try {
-        console.log('Fetching profile for user:', user.id);
+        // Fetch user profile
         const { data: profile, error } = await supabase
           .from('profiles')
           .select('pro')
@@ -229,7 +215,7 @@ export default function Home() {
           // Handle specific error cases
           if (error.code === 'PGRST116') {
             // Profile doesn't exist - this is normal for new users
-            console.log('Profile not found for user, will be created on first generation');
+            // Profile will be created on first generation
             setIsPro(false);
           } else {
             // Log more detailed error information
@@ -255,7 +241,7 @@ export default function Home() {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event: any, session: any) => {
-        console.log('Auth state changed:', event, session?.user?.email);
+        console.log('Auth state changed:', event, session?.user?.email || 'signed out');
         setUser(session?.user || null);
         
         // Reset quota state on auth changes
@@ -265,14 +251,14 @@ export default function Home() {
         if (session?.user) {
           // Create or get profile when user signs in
           try {
-            console.log('Auth change: Fetching profile for user:', session.user.id);
+            // Fetch profile for signed-in user
             const { data: profile, error: profileError } = await supabase
               .from('profiles')
               .select('pro')
               .eq('user_id', session.user.id)
               .single();
             
-            console.log('Auth change: Profile fetch result:', { profile, profileError });
+            // Handle profile fetch result
             
             if (profileError && profileError.code === 'PGRST116') {
               // Profile doesn't exist, create it
@@ -286,10 +272,6 @@ export default function Home() {
                 });
               
               if (insertError) {
-                console.log('Raw insertError:', insertError);
-                console.log('insertError type:', typeof insertError);
-                console.log('insertError keys:', Object.keys(insertError));
-                
                 console.error('Error creating profile:', {
                   code: insertError.code || 'unknown',
                   message: insertError.message || 'No message',
@@ -299,11 +281,7 @@ export default function Home() {
               }
               setIsPro(false);
             } else if (profileError) {
-              // Other profile errors - log raw error first for debugging
-              console.log('Raw profileError in auth change:', profileError);
-              console.log('profileError type:', typeof profileError);
-              console.log('profileError keys:', Object.keys(profileError));
-              
+              // Other profile errors
               console.error('Error fetching profile in auth change:', {
                 code: profileError.code || 'unknown',
                 message: profileError.message || 'No message',

@@ -23,7 +23,7 @@ export default function AuthPanel({ isOpen, onClose, onAuthSuccess }: AuthPanelP
   let supabase: ReturnType<typeof createClientComponentClient> | null = null;
   try {
     supabase = createClientComponentClient();
-    console.log('Supabase client initialized successfully');
+    // Supabase client ready
   } catch (error) {
     console.error('Failed to initialize Supabase client:', error);
   }
@@ -55,14 +55,14 @@ export default function AuthPanel({ isOpen, onClose, onAuthSuccess }: AuthPanelP
     setMessage("");
     
     try {
-      console.log('Attempting to sign up:', email);
+      // Attempting sign up
       
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password: password
       });
       
-      console.log('Sign up response:', { data, error });
+      // Handle sign up response
       
       if (error) {
         throw error;
@@ -92,14 +92,14 @@ export default function AuthPanel({ isOpen, onClose, onAuthSuccess }: AuthPanelP
     setMessage("");
     
     try {
-      console.log('Attempting to sign in:', email);
+      // Attempting sign in
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password
       });
       
-      console.log('Sign in response:', { data, error });
+      // Handle sign in response
       
       if (error) {
         throw error;

@@ -13,11 +13,7 @@ export const createClientComponentClient = () => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  console.log('Environment check:', {
-    hasUrl: !!supabaseUrl,
-    hasKey: !!supabaseAnonKey,
-    urlPreview: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'missing'
-  });
+  // Validate environment variables
 
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error(`Missing Supabase environment variables. URL: ${!!supabaseUrl}, Key: ${!!supabaseAnonKey}`);
