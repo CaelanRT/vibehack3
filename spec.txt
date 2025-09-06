@@ -1,0 +1,371 @@
+Awesome — here’s a very detailed, one-day build spec for the AI Support Reply Suggestor you can ship at a hackathon and charge for with Stripe Checkout. It’s scoped to be realistic in a single day while leaving clear hooks for “Day 2+” growth.
+
+AI Support Reply Suggestor — 1-Day MVP Spec
+0) TL;DR
+
+What ships today: A web app where a support rep pastes a customer message → selects tone → clicks Generate → gets 2–3 AI reply drafts → one-click “Copy”.
+
+Billing: Stripe Checkout for “Unlimited replies” (free plan = 5/day soft limit).
+
+Stack: Next.js + Vercel, API routes (Node), OpenAI API, Stripe.
+
+No DB required (ship fast). Optional: add Upstash Redis / Supabase if you want server-side rate limits or a paid flag.
+
+1) Product Scope (Day-1)
+Core user stories (acceptance criteria)
+
+Paste & Generate
+
+Given: a text area with a pasted customer email.
+
+When: I choose a Tone (Friendly / Professional / Concise) and click Generate.
+
+Then: I see 3 reply drafts within ~3s (each <150 words), each with a Copy button.
+
+Free vs Paid gating
+
+Given: I’m on free tier.
+
+When: I generate replies more than 5 times in a day.
+
+Then: The Generate button disables and a modal prompts me to Upgrade (Stripe Checkout link).
+
+Checkout
+
+Given: I click Upgrade.
+
+When: Stripe Checkout completes.
+
+Then: I land on a /thank-you page explaining how to unlock unlimited usage (manual unlock code OR auto via webhook if implemented).
+
+Basic safety
+
+AI replies never invent policy details and include a brief clarifying question if information is missing.
+
+Toxic/abusive customer inputs are defused politely.
+
+Definition of Done (Day-1): Deployed app on Vercel, working generation, working soft free limit, Stripe Checkout link live, and a polished demo flow.
+
+2) Architecture
+
+Frontend: Next.js (App Router) + Tailwind
+Server: Next.js API routes (Node runtime)
+AI: OpenAI text generation endpoint
+Payments: Stripe Checkout (one “Pro” product/price)
+State: LocalStorage (free-count), HTTP-only cookie (session id).
+Optional: Upstash Redis or Supabase for server-side rate limit & paid flag; Stripe webhook.
+
+Data flow (MVP)
+
+User pastes message → POST /api/generate with { message, tone, lang? }.
+
+Server calls OpenAI with a structured prompt → returns 3 replies.
+
+Frontend renders reply cards → Copy.
+
+Frontend increments local free-use counter; if >5 → show Upgrade modal.
+
+Upgrade → /api/create-checkout-session → Stripe hosted Checkout → redirect to /thank-you.
+
+3) UI/UX (minimal, clean, demo-ready)
+
+Header: Logo + “Upgrade” button (ghost style) + “Pro” badge if paid (day-1: fake after checkout).
+
+Main card:
+
+Textarea (min 8 rows) for customer message.
+
+Tone select: Friendly / Professional / Concise (radio buttons).
+
+(Optional) Language: Auto / English / French / Spanish.
+
+Generate button (shows spinner).
+
+Results grid: 3 reply cards
+
+Header: “Draft A / B / C”
+
+Body: AI text
+
+Footer: “Copy” button + “Shorten/Expand” secondary action (optional).
+
+Footer: “Free: 5 replies/day. Unlimited with Pro.”
+
+Empty-state copy (above the fold):
+
+“Paste a customer email. Get 3 polished replies in seconds. Keep the human, skip the typing.”
+
+4) Prompts (copy-paste ready)
+System prompt
+You are a senior customer support agent. You write clear, empathetic, policy-safe replies.
+You NEVER invent product details or policies. If critical info is missing, you ask one concise clarifying question.
+You avoid legal promises and do not offer refunds unless explicitly stated by the user's message.
+Keep each reply under 150 words. Use the target tone and keep brand-agnostic language.
+If the input contains abuse, stay calm and de-escalate politely.
+
+User prompt (template)
+CUSTOMER MESSAGE:
+"""
+{{message}}
+"""
+
+CONTEXT:
+- Tone: {{tone}}  (one of: Friendly, Professional, Concise)
+- Language: {{language}}  (e.g., Auto or "English")
+
+TASK:
+Generate 3 different reply drafts to the customer. 
+Rules:
+- Each draft must be self-contained, helpful, and <150 words.
+- If information is missing (order #, plan, dates, etc.), ask one clarifying question near the end.
+- No hallucinated policy or product details.
+- Keep tone = {{tone}}.
+- If original message is in another language, reply in that language unless Language is set to English.
+Return JSON with keys "drafts": [ "text1", "text2", "text3" ].
+
+Model params (start here)
+
+temperature: 0.5 (balanced creativity)
+
+max_tokens: ~400 (3 drafts under 150w each)
+
+top_p: 1
+
+presence_penalty: 0 / frequency_penalty: 0.2 (reduce repetition)
+
+5) API Design
+POST /api/generate
+
+Body: { message: string, tone: "Friendly"|"Professional"|"Concise", language?: "Auto"|"English"|"French"|... }
+
+Auth: none (hackathon), but read a session cookie for telemetry/rate-limit if you add it.
+
+Logic:
+
+Validate inputs (min length, strip HTML).
+
+Call OpenAI with system/user prompts above.
+
+Parse JSON response; fallback to safe text if JSON parse fails.
+
+Return { drafts: string[] }.
+
+Example (pseudo-TS)
+
+// /app/api/generate/route.ts
+import { NextResponse } from "next/server";
+import OpenAI from "openai";
+
+export async function POST(req: Request) {
+  const { message, tone = "Friendly", language = "Auto" } = await req.json();
+  if (!message || message.trim().length < 10) {
+    return NextResponse.json({ error: "Message too short" }, { status: 400 });
+  }
+
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+
+  const system = `...system prompt from spec...`;
+  const user = `...user prompt template filled with ${message}/${tone}/${language}...`;
+
+  const resp = await client.chat.completions.create({
+    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    temperature: 0.5,
+    max_tokens: 400,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user }
+    ]
+  });
+
+  const text = resp.choices?.[0]?.message?.content ?? "";
+  // Try JSON parse, fallback to split by \n\n if needed
+  let drafts: string[] = [];
+  try {
+    const j = JSON.parse(text);
+    drafts = j.drafts?.slice(0,3) ?? [];
+  } catch {
+    drafts = text.split(/\n\n+/).slice(0,3);
+  }
+
+  return NextResponse.json({ drafts });
+}
+
+POST /api/create-checkout-session
+
+Body: { plan: "pro" }
+
+Logic: Create Stripe Checkout Session (mode: subscription or one-time for hackathon), return url.
+
+// /app/api/create-checkout-session/route.ts
+import Stripe from "stripe";
+import { NextResponse } from "next/server";
+
+export async function POST() {
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-06-20" as any });
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription", // or "payment" for one-time
+    line_items: [{ price: process.env.STRIPE_PRICE_ID!, quantity: 1 }],
+    success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/thank-you`,
+    cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/`,
+    allow_promotion_codes: true
+  });
+
+  return NextResponse.json({ url: session.url });
+}
+
+(Optional) POST /api/stripe-webhook
+
+Purpose: Mark user/session as paid.
+
+Day-1 shortcut: Skip webhook → on Thank You page, show a temporary unlock code (“PRO-DEMO-2025”) the judges can enter to turn on unlimited for their session (stored in localStorage).
+
+Day-2: Add webhook + Redis/Supabase to persist paid = true for the session/user.
+
+6) Rate Limiting & Gating (Day-1)
+
+Soft limit: Track freeGenerationsToday in localStorage keyed by date.
+
+After each /api/generate, increment. If > 5, disable Generate and open Upgrade modal.
+
+Pros: zero backend work, perfect for demo.
+
+Cons: not secure → acceptable for hackathon.
+
+Day-2 (optional):
+
+Set a signed session cookie on first visit.
+
+Store counts in Upstash Redis keyed by sessionId:yyyy-mm-dd.
+
+Stripe webhook updates paid:<sessionId>=true.
+
+7) Stripe Setup
+
+Create product: “Support Reply Pro”
+
+Price: $39/month (change later)
+
+Billing: monthly, trial: none (or 7 days if you want).
+
+Get IDs: STRIPE_SECRET_KEY, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, STRIPE_PRICE_ID.
+
+Environment (.env.local):
+
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4o-mini
+STRIPE_SECRET_KEY=sk_live_or_test...
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_or_test...
+STRIPE_PRICE_ID=price_12345
+NEXT_PUBLIC_BASE_URL=https://yourapp.vercel.app
+
+8) Cost & Performance Guardrails
+
+Token budget: 400–600 tokens per request total → a few cents on mini models.
+
+Hard limits: truncation if message.length > 2,500 chars (prompt warns user to shorten).
+
+Timeouts: 15s server timeout; show retry button.
+
+9) Security & Privacy (quick wins)
+
+Strip HTML & scripts from inputs.
+
+Don’t log raw messages server-side (only request IDs + duration).
+
+Add a brief Privacy note in footer: “We don’t store your messages. They are sent to our AI provider for generation, then discarded.”
+
+10) Error Handling UX
+
+Model error / 429 → toast: “Model is busy. Try again.”
+
+Bad input → inline validation under textarea (min 10 chars).
+
+Network fail → “Retry” button; preserve input.
+
+Empty drafts → show a safe fallback draft: apology + clarifying question.
+
+11) Analytics (Day-1 lightweight)
+
+Client-side console.log + basic window.plausible or PostHog snippet (pageview, generate_clicked, upgrade_clicked).
+
+Server: log only counts & durations (no PII).
+
+12) Deployment Steps
+
+npx create-next-app@latest support-reply
+
+Add Tailwind: npx tailwindcss init -p (follow Next/Tailwind quickstart).
+
+Implement /app/page.tsx UI, /api/generate, /api/create-checkout-session.
+
+Set env vars in Vercel project.
+
+git push → Vercel deploy.
+
+Test Stripe Checkout in test mode.
+
+Ship.
+
+13) Polished Demo Script (for judges)
+
+Paste an angry email about a late order.
+
+Choose Friendly tone → Generate → show 3 drafts in ~2–3s.
+
+Click Copy → paste into Gmail → (optional) minor edit → send.
+
+Hit Generate 5 times → see Upgrade prompt.
+
+Click Upgrade → Stripe Checkout → Thank You → enter unlock code → unlimited enabled.
+
+Close: “Today it’s copy-paste. Tomorrow we push drafts directly into Gmail/Zendesk and learn from your KB. Same speed, even less friction.”
+
+14) Hour-by-Hour Plan (realistic)
+
+Hour 1 — Repo, Tailwind, basic layout, header/footer.
+Hour 2 — Textarea + Tone controls + “Generate” button; skeleton result cards.
+Hour 3 — /api/generate endpoint with OpenAI; wire up client; render drafts.
+Hour 4 — LocalStorage free-limit logic + Upgrade modal.
+Hour 5 — Stripe Checkout endpoint + button + /thank-you page with unlock code input.
+Hour 6 — Empty/error states, truncation, loading spinners, copy buttons, polish.
+Hour 7 — Basic analytics, privacy blurb, final copy, lighthouse pass.
+Hour 8 — Full run-throughs, record demo, contingency fixes.
+
+15) Stretch (if time remains)
+
+Language auto-detect (model call #1: “what language?”) and reply in same.
+
+Shorten/Expand buttons per draft (call model with edit prompt).
+
+Saved Replies (localStorage array; export as CSV).
+
+Gmail Drafts integration (send reply to Drafts via Google API OAuth — likely Day-2).
+
+16) Risks & Mitigations
+
+Hallucinated policy → strong system rules + “don’t invent” + encourage clarifying question.
+
+Latency spikes → keep prompts short, use “mini/fast” models, show spinner + optimistic UI.
+
+Abuse/toxicity → de-escalation rules + optional pre-filter (“If input contains slurs, don’t mirror them”).
+
+Rate-limit circumvention → acceptable at hackathon; fix with Redis later.
+
+17) Ready-to-paste UI Copy
+
+Hero: “Reply to customers 5× faster. Paste email → get 3 polished drafts.”
+
+CTA: “Generate replies (free)” / “Upgrade to Pro (unlimited)”
+
+Footnote: “We don’t store your messages. They’re sent to our AI provider to generate replies, then discarded.”
+
+18) What “Day-2” Looks Like (brief)
+
+Add Gmail Drafts + Zendesk app (browser extension or OAuth app).
+
+Add KB ingestion (upload FAQ PDF/URL; store vectors; augment prompts).
+
+Add team seats + webhook-based Pro flag + Redis rate limits.
+
+Add analytics (AHT, CSAT proxy, tone usage, macro library).
